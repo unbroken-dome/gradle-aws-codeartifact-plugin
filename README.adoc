@@ -1,0 +1,190 @@
+= Gradle Plugin for AWS CodeArtifact
+:pluginId: org.unbroken-dome.aws.codeartifact
+:versionPrefix: 0.1
+:versionSuffix: .0
+:version: 0.1.0
+
+image:https://img.shields.io/gradle-plugin-portal/v/{pluginId}?versionPrefix={versionPrefix}&versionSuffix={versionSuffix}[link=https://plugins.gradle.org/plugin/{pluginId}]
+
+This plugin improves support for using AWS CodeArtifact Maven repositories from a Gradle build.
+
+The "standard" way of working with AWS CodeArtifact in Gradle, as recommended by the
+link:https://docs.aws.amazon.com/codeartifact/latest/ug/maven-gradle.html[AWS Documentation], requires
+users to fetch an authorization token before the build and pass it to Gradle as an environment variable.This
+has several drawbacks:
+
+- It requires users (or CI agents) to have the AWS CLI installed in order to run builds.
+- It requires users (or CI agents) to perform an extra step before the build.
+- Expiration of tokens will be noticed by users only through build failures, to which the resolution may not be clear.
+- Always fetching an authorization token preemptively can be wasteful, because for the majority of builds, Gradle will
+reuse artifacts from its local disk cache instead of downloading them.
+
+Using this plugin lets you declare your CodeArtifact repositories in a Gradle `repositories` block in a more
+convenient way, and removes the need to fetch authentication tokens before the build.
+
+
+== Quickstart
+
+1. Apply the plugin to your _settings_ script:
++
+.settings.gradle / settings.gradle.kts
+[source,kotlin,subs="+attributes"]
+----
+plugins {
+    id("org.unbroken-dome.aws.codeartifact") version "{version}"
+}
+----
++
+
+2. Use the `codeArtifact` extension when declaring a Maven repository, instead of the `url`.
+Leave out the `credentials`.
++
+[source,kotlin]
+----
+repositories {
+    maven {
+        codeArtifact {
+            domain = "my-domain"
+            domainOwner = "123456789012"
+            repositoryName = "my-repo"
+        }
+    }
+}
+----
++
+You can use this extension almost anywhere where you can declare a repository, including the `publishing` block,
+a `buildscript` block, and the and `dependencyManagement` in your settings script.
+(For `pluginManagement` things are a bit more complicated; see <<_using_gradle_plugins_from_an_aws_codeartifact_repository>> below.)
+
+3. Pass the AWS credentials to your Gradle build, for example using environment variables:
++
+[source,bash]
+----
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+./gradlew build
+----
++
+See <<_aws_credentials>> for details.
+
+
+== How It Works
+
+Unfortunately, Gradle offers very limited possibilities to hook into the artifact resolution process or rewrite the
+requests to a Maven repository when the dependencies are resolved.In addition, resolution of artifacts (including
+Gradle plugins) can happen very early in the configuration phase of a Gradle build.
+
+The plugin's solution to this is launching a local proxy server as a build-scoped service, which acts as a temporary
+Maven repository.The proxy forwards all calls to the correct AWS CodeArtifact endpoint, takes care of endpoint
+resolution and automatically fetches authorization tokens when required.In addition to taking advantage of Gradle's
+lazy evaluation features, the proxy server itself acts lazily: it will only make calls to AWS APIs (or even initialize
+the AWS API clients) once a dependency is actually requested.This way, there is only minimal overhead for the majority
+of builds that do not require fetching dependencies from a remote repository.
+
+
+[#_aws_credentials]
+== AWS Credentials
+
+The proxy server that is launched by the plugin needs AWS credentials to fetch endpoint URLs and tokens for AWS
+CodeArtifact repositories.
+
+As the proxy server is built using the AWS SDK for Java, it supports passing the credentials via Java system properties
+(e.g. `aws.profile`) and environment variables (e.g. `AWS_PROFILE`) as described in the
+link:https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials.html[SDK documentation].
+
+[TIP]
+====
+One way to set Java system properties for a Gradle build is to declare them with the `systemProp.` prefix in a
+`gradle.properties` file.For example:
+
+.gradle.properties
+[source,properties]
+----
+systemProp.aws.profile=gradle-build
+----
+====
+
+In addition, the plugin supports the Gradle project properties `aws.accessKeyId`, `aws.secretAccessKey`, `aws.profile`
+and `aws.region` for convenience.These can be declared in a `gradle.properties` file or on the command line with the
+`-P` switch.If these properties are present, they will have higher precedence than the other mechanisms like
+system properties or environment variables.
+
+
+== Where to Apply the Plugin
+
+In contrast to most Gradle plugins, which typically work only on a `Project`, this plugin supports being applied to
+different targets:
+
+- the *settings* script (`Settings` object, file name `settings.gradle.kts` or `settings.gradle`).
++
+This is the recommended usage.
+
+- a *project* build script (`Project` object, file name `build.gradle.kts` or `build.gradle`).
++
+Use this only when building very simple projects without multi-modules and without a settings script.
+Applying the plugin to your settings script will automatically apply it to every project in the build.
+
+- an *init* script (`Gradle` object, file name `~/.gradle/init.gradle` or specified with `--init-script`).
++
+This has some limitations, but may be necessary when using other Gradle plugins that are hosted in an AWS
+CodeArtifact repository (see below).
+
+
+== Caching AWS CodeArtifact Tokens
+
+Authorization tokens for AWS CodeArtifact are cached in memory, for the duration of a single build (i.e., an invocation
+of Gradle).
+
+
+[#_using_gradle_plugins_from_an_aws_codeartifact_repository]
+== Using Gradle Plugins from an AWS CodeArtifact Repository
+
+A special case arises when using Gradle plugins hosted in an AWS CodeArtifact repository.Resolution of Gradle plugin
+artifacts happens much earlier than other dependencies, so even applying this plugin to the settings script will not
+allow you to configure repositories in the following places:
+
+- Repositories in a `pluginManagement` block of a settings script:
++
+The `pluginManagement` is used for both settings plugins and project plugins; unfortunately Gradle does not offer a
+separate block for settings plugin management.Therefore, the `pluginManagement` block in a settings script will be
+evaluated before any settings plugins are applied.
+
+- repositories in a `buildscript` block of a settings script
+
+There are two possible solutions to this:
+
+1. *Use `buildscript` blocks instead of `pluginManagement`* (project plugins only).
++
+You can use a `beforeProject` block in your settings script to apply a buildscript to all projects:
++
+.settings.gradle.kts
+[source,kotlin]
+----
+beforeProject {
+    buildscript {
+        repositories {
+            maven {
+                codeArtifact {
+                    // ...
+                }
+            }
+        }
+    }
+}
+----
+
+2. *Apply the AWS CodeArtifact plugin to an init script*
++
+Another solution would be to apply the plugin even one step earlier, to an init script.
++
+The standard location for an init script is `~/.gradle/init.gradle`, but you can also specify it on the Gradle
+command line using the `--init-script` or `-I` option.That way you can keep the init script under version
+control as well.
++
+[NOTE]
+====
+A Gradle init script does not have access to project-level properties, even if they are passed on
+the command line. For this reason, when used in an init script the plugin will launch a separate CodeArtifact proxy
+server which only considers the standard environment variables and system properties for AWS credentials
+(`AWS_PROFILE` etc.) but will not consider project-level Gradle properties.
+====
