@@ -7,7 +7,6 @@ plugins {
 
 
 repositories {
-    mavenLocal()
     mavenCentral()
 }
 
@@ -18,7 +17,7 @@ val awsSdkVersion = project.extra["aws.sdk.version"] as String
 dependencies {
     compileOnly(kotlin("stdlib-jdk8"))
 
-    implementation("org.unbroken-dome.aws-codeartifact-maven-proxy:aws-codeartifact-maven-proxy:0.1.0") {
+    implementation("org.unbroken-dome.aws-codeartifact-maven-proxy:aws-codeartifact-maven-proxy:0.3.0") {
         exclude(group = "org.jetbrains.kotlin")
     }
 
