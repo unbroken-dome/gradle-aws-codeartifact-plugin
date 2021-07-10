@@ -5,6 +5,7 @@ import org.gradle.api.provider.ProviderFactory
 import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
 import org.unbrokendome.awscodeartifact.mavenproxy.CodeArtifactMavenProxyServer
+import org.unbrokendome.awscodeartifact.mavenproxy.LogLevel
 import software.amazon.awssdk.auth.credentials.*
 import software.amazon.awssdk.regions.Region
 import java.net.URI
@@ -33,6 +34,7 @@ internal abstract class CodeArtifactMavenProxyService
         val awsProfileName: Property<String>
         val awsRegion: Property<String>
         val tokenTtl: Property<Duration>
+        val wiretapLogLevel: Property<LogLevel>
     }
 
 
@@ -60,6 +62,7 @@ internal abstract class CodeArtifactMavenProxyService
             awsCredentialsProvider = buildCredentialsProvider(),
             awsRegion = params.awsRegion.orNull?.let { Region.of(it) },
             tokenTtl = params.tokenTtl.getOrElse(Duration.ofHours(1L)),
+            wiretapLogLevel = params.wiretapLogLevel.getOrElse(LogLevel.DEBUG)
         )
     }
 
@@ -115,5 +118,12 @@ internal fun CodeArtifactMavenProxyService.Parameters.setFromProjectProperties(p
     )
     awsRegion.set(
         providers.gradleProperty("aws.region").forUseAtConfigurationTime()
+    )
+    wiretapLogLevel.set(
+        providers.gradleProperty("aws.codeartifact.proxy.wiretapLogLevel")
+            .forUseAtConfigurationTime()
+            .map { logLevelName ->
+                LogLevel.valueOf(logLevelName.toUpperCase())
+            }
     )
 }
