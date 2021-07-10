@@ -6,8 +6,11 @@ import org.gradle.api.services.BuildService
 import org.gradle.api.services.BuildServiceParameters
 import org.unbrokendome.awscodeartifact.mavenproxy.CodeArtifactMavenProxyServer
 import org.unbrokendome.awscodeartifact.mavenproxy.LogLevel
-import software.amazon.awssdk.auth.credentials.*
+import org.unbrokendome.gradle.plugins.aws.codeartifact.internal.aws.AwsParameters
+import org.unbrokendome.gradle.plugins.aws.codeartifact.internal.aws.buildCredentialsProvider
+import org.unbrokendome.gradle.plugins.aws.codeartifact.internal.aws.setFromProjectProperties
 import software.amazon.awssdk.regions.Region
+import java.io.File
 import java.net.URI
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
@@ -28,11 +31,7 @@ internal abstract class CodeArtifactMavenProxyService
     private val serverFuture: CompletableFuture<CodeArtifactMavenProxyServer>
 
 
-    interface Parameters : BuildServiceParameters {
-        val awsAccessKeyId: Property<String>
-        val awsSecretAccessKey: Property<String>
-        val awsProfileName: Property<String>
-        val awsRegion: Property<String>
+    interface Parameters : BuildServiceParameters, AwsParameters {
         val tokenTtl: Property<Duration>
         val wiretapLogLevel: Property<LogLevel>
     }
@@ -59,42 +58,11 @@ internal abstract class CodeArtifactMavenProxyService
         val params = this.parameters
 
         return CodeArtifactMavenProxyServer.Options(
-            awsCredentialsProvider = buildCredentialsProvider(),
-            awsRegion = params.awsRegion.orNull?.let { Region.of(it) },
+            awsCredentialsProvider = params.buildCredentialsProvider(),
+            awsRegion = params.region.orNull?.let { Region.of(it) },
             tokenTtl = params.tokenTtl.getOrElse(Duration.ofHours(1L)),
             wiretapLogLevel = params.wiretapLogLevel.getOrElse(LogLevel.DEBUG)
         )
-    }
-
-
-    private fun buildCredentialsProvider(): AwsCredentialsProvider {
-        val params = this.parameters
-
-        val awsAccessKeyId = params.awsAccessKeyId.orNull
-        val awsSecretAccessKey = params.awsSecretAccessKey.orNull
-        val accessKeyCredentialsProvider: AwsCredentialsProvider? =
-            if (awsAccessKeyId != null && awsSecretAccessKey != null) {
-                val credentials = AwsBasicCredentials.create(awsAccessKeyId, awsSecretAccessKey)
-                StaticCredentialsProvider.create(credentials)
-            } else null
-
-        val awsProfileName = params.awsProfileName.orNull
-
-        val defaultCredentialsProvider = DefaultCredentialsProvider.builder()
-            .also { b ->
-                awsProfileName?.let { b.profileName(it) }
-            }
-            .build()
-
-        return if (accessKeyCredentialsProvider != null) {
-            AwsCredentialsProviderChain.builder()
-                .credentialsProviders(
-                    accessKeyCredentialsProvider, defaultCredentialsProvider
-                )
-                .build()
-        } else {
-            defaultCredentialsProvider
-        }
     }
 
 
@@ -106,19 +74,11 @@ internal abstract class CodeArtifactMavenProxyService
 }
 
 
-internal fun CodeArtifactMavenProxyService.Parameters.setFromProjectProperties(providers: ProviderFactory) {
-    awsAccessKeyId.set(
-        providers.gradleProperty("aws.accessKeyId").forUseAtConfigurationTime()
-    )
-    awsSecretAccessKey.set(
-        providers.gradleProperty("aws.secretAccessKey").forUseAtConfigurationTime()
-    )
-    awsProfileName.set(
-        providers.gradleProperty("aws.profile").forUseAtConfigurationTime()
-    )
-    awsRegion.set(
-        providers.gradleProperty("aws.region").forUseAtConfigurationTime()
-    )
+internal fun CodeArtifactMavenProxyService.Parameters.setFromProjectProperties(
+    providers: ProviderFactory, rootDir: File
+) {
+    (this as AwsParameters).setFromProjectProperties(providers, rootDir)
+
     wiretapLogLevel.set(
         providers.gradleProperty("aws.codeartifact.proxy.wiretapLogLevel")
             .forUseAtConfigurationTime()

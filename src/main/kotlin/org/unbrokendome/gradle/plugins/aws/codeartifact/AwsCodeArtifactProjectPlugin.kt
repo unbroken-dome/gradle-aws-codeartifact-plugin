@@ -17,7 +17,7 @@ class AwsCodeArtifactProjectPlugin : Plugin<Project> {
         val proxyServiceProvider = project.gradle.sharedServices.registerIfAbsent(
             CodeArtifactMavenProxyService.RegistrationName, CodeArtifactMavenProxyService::class.java
         ) { spec ->
-            spec.parameters.setFromProjectProperties(project.rootProject.providers)
+            spec.parameters.setFromProjectProperties(project.rootProject.providers, project.rootDir)
         }
 
         project.repositories.handleCodeArtifactExtensions(proxyServiceProvider)
