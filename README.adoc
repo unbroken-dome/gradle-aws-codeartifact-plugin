@@ -92,22 +92,41 @@ As the proxy server is built using the AWS SDK for Java, it supports passing the
 (e.g. `aws.profile`) and environment variables (e.g. `AWS_PROFILE`) as described in the
 link:https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials.html[SDK documentation].
 
+In addition, the plugin supports passing some AWS settings as Gradle properties for convenience. These can be declared
+in a `gradle.properties` file, or on the command line with the `-P` switch. The following settings are supported as
+Gradle properties:
+
+- `aws.accessKeyId`
+- `aws.secretAccessKey`
+- `aws.sessionToken`
+- `aws.configFile`
+- `aws.sharedCredentialsFile`
+- `aws.profile`
+- `aws.region`
+
+TIP: Relative paths in `aws.configFile` and `aws.sharedCredentialsFile` are resolved from the Gradle project's
+  root directory.
+
+If these properties are present, they will have higher precedence than system properties or environment variables,
+but the default order of the credential providers is still preserved. For example, if you pass environment variables
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to the build, as well as a Gradle property `aws.profile`, then the
+access-key based authorization will be used because that credential provider is higher in the chain than the
+profile-based credential provider.
+
 [TIP]
 ====
-One way to set Java system properties for a Gradle build is to declare them with the `systemProp.` prefix in a
-`gradle.properties` file.For example:
+This allows to have a setup that works both in local and CI builds:
 
-.gradle.properties
-[source,properties]
-----
-systemProp.aws.profile=gradle-build
-----
+- Add a profile name for local builds by setting the `aws.profile` property in the gradle.properties file, which is
+committed to your version control system. Every developer should have this AWS profile configured in their local
+`~/.aws/config` and `~/.aws/credentials` file.
+- Configure your CI build system to inject the `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
+into each build. Since these "direct" credentials have higher precedence than the profile, the `aws.profile` property
+is ignored, and the given access key is used.
++
+Alternatively, you could manually create the profile files in a pre-build step and use the same profile name in the
+CI build.
 ====
-
-In addition, the plugin supports the Gradle project properties `aws.accessKeyId`, `aws.secretAccessKey`, `aws.profile`
-and `aws.region` for convenience.These can be declared in a `gradle.properties` file or on the command line with the
-`-P` switch.If these properties are present, they will have higher precedence than the other mechanisms like
-system properties or environment variables.
 
 
 == Where to Apply the Plugin
