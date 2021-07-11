@@ -145,7 +145,12 @@ internal open class DefaultAwsCodeArtifactMavenRepositoryExtension
                 mavenArtifactRepository.name, domain, domainOwner, repositoryName
             )
 
-            val mavenUrl = proxyServiceProvider.get().getMavenUrl(domain, domainOwner, repositoryName)
+            val proxyService = proxyServiceProvider.get()
+            val mavenUrl = proxyService.getMavenUrl(domain, domainOwner, repositoryName)
+            logger.debug(
+                "Resolved URL for Maven repository \"{}\": {}", mavenArtifactRepository.name, mavenUrl
+            )
+
             mavenArtifactRepository.url = mavenUrl
             mavenArtifactRepository.isAllowInsecureProtocol = true
         }
@@ -195,6 +200,7 @@ internal fun MavenArtifactRepository.getOrCreateCodeArtifactExtension(): AwsCode
  */
 internal fun MavenArtifactRepository.createCodeArtifactExtension(): AwsCodeArtifactMavenRepositoryExtension {
     this as ExtensionAware
+
     return extensions.create(
         AwsCodeArtifactMavenRepositoryExtension::class.java,
         AwsCodeArtifactMavenRepositoryExtension.ExtensionName,
