@@ -1,8 +1,8 @@
 = Gradle Plugin for AWS CodeArtifact
 :pluginId: org.unbroken-dome.aws.codeartifact
-:versionPrefix: 0.1
+:versionPrefix: 0.2
 :versionSuffix: .0
-:version: 0.1.0
+:version: {versionPrefix}{versionSuffix}
 
 image:https://img.shields.io/gradle-plugin-portal/v/{pluginId}?versionPrefix={versionPrefix}&versionSuffix={versionSuffix}[link=https://plugins.gradle.org/plugin/{pluginId}]
 
