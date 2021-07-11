@@ -31,35 +31,44 @@ internal fun AwsParameters.buildCredentialsProvider(): AwsCredentialsProvider {
     return AwsCredentialsProviderChain.builder()
         .reuseLastProviderEnabled(true)
         .credentialsProviders(
-            GradleProviderCredentialsProvider(accessKeyId, secretAccessKey, sessionToken),
-            buildProfileCredentialsProvider(),
-            ContainerCredentialsProvider.builder().build(),
-            InstanceProfileCredentialsProvider.builder().build()
+            listOfNotNull(
+                GradleProviderCredentialsProvider(accessKeyId, secretAccessKey, sessionToken),
+                buildProfileCredentialsProvider(),
+                ContainerCredentialsProvider.builder().build(),
+                InstanceProfileCredentialsProvider.builder().build()
+            )
         )
         .build()
 }
 
 
-private fun AwsParameters.buildProfileCredentialsProvider(): AwsCredentialsProvider {
+private fun AwsParameters.buildProfileCredentialsProvider(): AwsCredentialsProvider? {
 
-    val profileFile = ProfileFile.aggregator()
-        .addFile(configFile.getAsProfileFile(ProfileFile.Type.CONFIGURATION))
-        .addFile(sharedCredentialsFile.getAsProfileFile(ProfileFile.Type.CREDENTIALS))
-        .build()
-    val profileName = profile.getOrElse("default")
+    val configFile = configFile.getAsProfileFile(ProfileFile.Type.CONFIGURATION)
+    val credentialsFile = sharedCredentialsFile.getAsProfileFile(ProfileFile.Type.CREDENTIALS)
 
-    return ProfileCredentialsProvider.builder()
-        .profileFile(profileFile)
-        .profileName(profileName)
-        .build()
+    return if (configFile != null && credentialsFile != null) {
+        val aggProfileFile = ProfileFile.aggregator()
+            .addFile(configFile)
+            .addFile(credentialsFile)
+            .build()
+        ProfileCredentialsProvider.builder()
+            .profileFile(aggProfileFile)
+            .profileName(profile.getOrElse("default"))
+            .build()
+    } else {
+        null
+    }
 }
 
 
-private fun Provider<File>.getAsProfileFile(type: ProfileFile.Type): ProfileFile =
-    ProfileFile.builder()
+private fun Provider<File>.getAsProfileFile(type: ProfileFile.Type): ProfileFile? {
+    val path = this.orNull?.toPath() ?: return null
+    return ProfileFile.builder()
         .type(type)
-        .content(this.get().toPath())
+        .content(path)
         .build()
+}
 
 
 internal fun AwsParameters.setFromProjectProperties(
