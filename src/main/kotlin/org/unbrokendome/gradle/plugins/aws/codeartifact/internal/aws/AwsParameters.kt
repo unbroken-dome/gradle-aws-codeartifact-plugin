@@ -10,6 +10,8 @@ import software.amazon.awssdk.profiles.ProfileFileLocation
 import software.amazon.awssdk.profiles.ProfileFileSystemSetting
 import software.amazon.awssdk.utils.SystemSetting
 import java.io.File
+import java.nio.file.Path
+import java.util.*
 
 
 internal interface AwsParameters {
@@ -89,16 +91,21 @@ internal fun AwsParameters.setFromProjectProperties(
     fun resolveToFile(path: String): File =
         rootDir.resolve(path)
 
+    fun fileProviderFromPath(pathProvider: () -> Optional<Path>): Provider<File> =
+        providers.provider { pathProvider().orElse(null).toFile() }
+
+
+
     accessKeyId.initProperty(SdkSystemSetting.AWS_ACCESS_KEY_ID)
     secretAccessKey.initProperty(SdkSystemSetting.AWS_SECRET_ACCESS_KEY)
     sessionToken.initProperty(SdkSystemSetting.AWS_SESSION_TOKEN)
     configFile.initProperty(
         ProfileFileSystemSetting.AWS_CONFIG_FILE, ::resolveToFile,
-        providers.provider { ProfileFileLocation.configurationFilePath().toFile() }
+        fileProviderFromPath { ProfileFileLocation.configurationFileLocation() }
     )
     sharedCredentialsFile.initProperty(
         ProfileFileSystemSetting.AWS_SHARED_CREDENTIALS_FILE, ::resolveToFile,
-        providers.provider { ProfileFileLocation.credentialsFilePath().toFile() }
+        fileProviderFromPath { ProfileFileLocation.credentialsFileLocation() }
     )
     profile.initProperty(ProfileFileSystemSetting.AWS_PROFILE)
     region.initProperty(SdkSystemSetting.AWS_REGION)
