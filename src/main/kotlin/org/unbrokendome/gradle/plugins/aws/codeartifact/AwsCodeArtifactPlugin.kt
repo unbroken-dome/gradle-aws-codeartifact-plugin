@@ -7,6 +7,10 @@ import org.gradle.api.invocation.Gradle
 import org.gradle.api.plugins.PluginAware
 
 
+/**
+ * Dispatcher plugin to use the correct plugin based on the target type, so the same plugin ID can be used
+ * regardless of whether the target is applied to a Project, Settings or Gradle object.
+ */
 class AwsCodeArtifactPlugin : Plugin<PluginAware> {
 
     override fun apply(target: PluginAware) {
